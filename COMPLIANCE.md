@@ -2,11 +2,16 @@
 
 This maps `template-npm-library` against **CDA Repository Baseline v1** and
 **CDA npm Library Profile v1** (both `Approved`). Only requirements with an
-observable implementation in this repository are listed. Anything that
-depends on GitHub/npm configuration outside version control is marked
-`EXTERNAL SETUP REQUIRED` — see `runbooks/setup-repository.md`, Section B.
-No compliance is claimed for anything not actually verified while building
-this template (see the validation log at the end of this file).
+observable implementation are listed. As of this revision, the repository
+lives at `Continuous-DrivenArchitecture/template-npm-library` (public,
+template) and the GitHub-side configuration below has been applied and
+verified live via the GitHub API — see "GitHub configuration (verified
+live)". Anything still marked `EXTERNAL SETUP REQUIRED` genuinely has not
+been applied (npm package/Trusted Publisher, and a small number of
+GitHub features with no bare API toggle) — see
+`runbooks/setup-repository.md`, Section B. No compliance is claimed for
+anything not actually verified (see the validation log at the end of this
+file).
 
 ## CDA Repository Baseline v1
 
@@ -14,24 +19,26 @@ this template (see the validation log at the end of this file).
 |---|---|---|
 | `main` is the only permanent branch | Repository initialized with `git init -b main`; no other branch created | PASS |
 | Short-lived branch prefixes (`feature/*`, `fix/*`, `chore/*`, `docs/*`, `refactor/*`) | Documented in `CONTRIBUTING.md`, "Branching" | PASS (documentation) |
-| Default branch = `main` | Local repo default branch is `main` | PASS locally / `EXTERNAL SETUP REQUIRED` on GitHub |
+| Default branch = `main` | GitHub `default_branch` field verified via API = `main` | PASS |
 | PR target = `main` | `.github/workflows/ci.yml` triggers on `pull_request: branches: [main]` | PASS |
-| Delete branch on merge = `true` | GitHub repository setting, not a file | EXTERNAL SETUP REQUIRED |
-| PR required to merge into `main`, no bypass | `.github/pull_request_template.md` exists; enforcement is a GitHub ruleset | EXTERNAL SETUP REQUIRED |
-| Required conversation resolution | Ruleset setting | EXTERNAL SETUP REQUIRED |
-| Strict required status checks | Ruleset setting | EXTERNAL SETUP REQUIRED |
-| Squash merge only; merge-commit and rebase-merge disabled | `CONTRIBUTING.md` documents squash-only; the merge-method restriction itself is a GitHub repository setting | Documented / EXTERNAL SETUP REQUIRED |
-| `Protect main` ruleset, bypass actors = none | Documented as the target in `runbooks/setup-repository.md`, Section B3 | EXTERNAL SETUP REQUIRED |
+| Delete branch on merge = `true` | Verified via API: `delete_branch_on_merge: true` | PASS |
+| PR required to merge into `main`, no bypass | `Protect main` ruleset created; `pull_request` rule active, `bypass_actors: []`, `current_user_can_bypass: "never"` — verified via API | PASS |
+| Required conversation resolution | `required_review_thread_resolution: true` on the `Protect main` ruleset — verified via API | PASS |
+| Strict required status checks | `strict_required_status_checks_policy: true` on the `Protect main` ruleset — verified via API | PASS |
+| Squash merge only; merge-commit and rebase-merge disabled | Verified via API: `allow_squash_merge: true`, `allow_merge_commit: false`, `allow_rebase_merge: false`; ruleset's `pull_request` rule also restricts `allowed_merge_methods` to `["squash"]` | PASS |
+| `Protect main` ruleset, bypass actors = none | Ruleset id 21189927, `enforcement: active`, `bypass_actors: []` — verified via API | PASS |
 | Required status checks are a stable, matrix-independent set | `.github/workflows/ci.yml`'s `ci-required` job depends on every real check and exposes one fixed name, independent of the Node version matrix | PASS |
 | Default `GITHUB_TOKEN` permissions = read | `ci.yml` sets `permissions: contents: read` at workflow level | PASS |
 | Write permissions granted only where needed | Only `release.yml` requests `contents: write` + `id-token: write`; `ci.yml` and `dependency-health.yml` stay read-only | PASS |
 | Third-party Actions pinned to full commit SHA | Every `uses:` in `ci.yml`, `release.yml`, `dependency-health.yml` is pinned to a 40-character SHA with the resolved tag in a comment | PASS |
-| Allowed-actions policy restricted | GitHub Actions repository setting | EXTERNAL SETUP REQUIRED |
+| Allowed-actions policy restricted | Verified via API: `allowed_actions: selected`, `github_owned_allowed: true`, `verified_allowed: false`, `patterns_allowed: []` — covers exactly the 3 GitHub-owned actions this template uses (`actions/checkout`, `actions/setup-node`, `actions/upload-artifact`) | PASS |
+| SHA pinning enforcement | Verified via API: `sha_pinning_required: true` (repository-level) | PASS |
 | Minimal secret footprint; no unused secrets | No secrets are defined or referenced by any workflow in this template | PASS |
 | No `NPM_TOKEN` | Absent from `.npmrc`, workflows, and repository secrets list | PASS |
 | Dependabot targets `main`, weekly, `npm` + `github-actions` | `.github/dependabot.yml` | PASS |
 | Dependency-freshness check is informational, not a hard gate | `dependency-health.yml`'s `outdated` job never fails the run (`\|\| true`, writes to `$GITHUB_STEP_SUMMARY` only) | PASS |
-| Secret scanning / push protection enabled | GitHub repository setting | EXTERNAL SETUP REQUIRED |
+| Secret scanning / push protection enabled | Verified via API: `security_and_analysis.secret_scanning.status: enabled`, `secret_scanning_push_protection.status: enabled` | PASS |
+| Dependabot security alerts enabled | Verified via API: `GET /vulnerability-alerts` returns 204 (enabled) | PASS |
 | `SECURITY.md` exists, describes private reporting | `SECURITY.md`, referencing GitHub Private Vulnerability Reporting | PASS |
 | `README`, `CONTRIBUTING`, `SECURITY`, `LICENSE` present | All four exist at repository root | PASS |
 | `CONTRIBUTING.md` explains branching, commits, PR, release, Action pinning | `CONTRIBUTING.md` covers all five explicitly | PASS |
@@ -50,11 +57,11 @@ this template (see the validation log at the end of this file).
 | Published tarball excludes `src/`, tests, tooling | `scripts/verify-pack.mjs` asserts this; verified locally — see validation log | PASS |
 | `verify-pack` required check | `scripts/verify-pack.mjs`, wired into `ci.yml`'s `package-verification` job, itself required by `ci-required` | PASS |
 | Packaged/public-consumption test, multi-Node-version aware | `scripts/verify-package-consumption.mjs` — installs the packed tarball into an out-of-tree fixture, imports via package name only, runtime + `.d.ts` check | PASS |
-| CI: typecheck, lint, test, build, verify-pack, consumption test, production audit — required | All implemented as distinct jobs in `ci.yml`, all listed in `ci-required`'s `needs` | PASS |
+| CI: typecheck, lint, test, build, verify-pack, consumption test, production audit — required | All implemented as distinct jobs in `ci.yml`, all listed in `ci-required`'s `needs`. A real gap was found and fixed during this rollout: the `package-verification` job originally ran `verify-pack`/`verify-consumption` without building first, which failed on the very first push to GitHub (dist/ didn't exist in that job's checkout) even though it had passed in every local run (build was always run manually first there). Fixed in commit `6060918`; the corrected workflow subsequently ran green on GitHub — see the validation log | PASS |
 | SBOM (SHOULD) | `sbom` job in `ci.yml`, `npm sbom --sbom-format=spdx --omit=dev`, uploaded as an artifact, included in `ci-required` | PASS |
-| Required check names stable/matrix-independent | `ci-required` job — see baseline row above | PASS |
+| Required check names stable/matrix-independent | `ci-required` job, registered as the sole required status check on the `Protect main` ruleset (`{"context":"ci-required"}`) — verified via API, and the check has a real successful run recorded (run 32561004185) | PASS |
 | Releases only from `main`, semantic-release only | `.releaserc.json`: `"branches": ["main"]`; `release.yml` triggers on `push: branches: [main]` | PASS |
-| `main` never written to by the release workflow | `release.yml` contains no push/commit step; no `@semantic-release/git`; verified — see validation log | PASS |
+| `main` never written to by the release workflow | `release.yml` contains no push/commit step; no `@semantic-release/git`. The real `Release` workflow run triggered by the initial push and by the CI-fix push both failed cleanly at semantic-release's own `git ls-remote` step (placeholder `repository.url`, exit 128) before reaching any git-writing step; `git ls-remote --tags origin` and `gh release list` both confirm zero tags/Releases exist on the live repository — see validation log | PASS |
 | No `chore(release)` commit | `.releaserc.json` plugin list has no git-commit plugin | PASS |
 | `@semantic-release/git` absent | Not installed, not in `.releaserc.json` | PASS |
 | Git tag points at the reviewed, squash-merged commit; no intermediate commit | Structural consequence of the plugin set above; confirmed via `@semantic-release/npm` source inspection (see validation log) | PASS (by construction; not exercised against a real remote — see limitations) |
@@ -67,10 +74,47 @@ this template (see the validation log at the end of this file).
 | Tag protection caveat documented | `runbooks/setup-repository.md`, "Ruleset — `Protect main`" table; no tag ruleset created | PASS (documentation) |
 | Production dependency audit required check | `audit` job, `npm audit --omit=dev --audit-level=high`, in `ci-required` | PASS |
 | Dependabot targets `main` | `.github/dependabot.yml`, no `target-branch` override (defaults to the repository's default branch, `main`) | PASS |
-| CodeQL for TypeScript (SHOULD) | Not a file-level concern — repository-level GitHub feature | EXTERNAL SETUP REQUIRED |
-| Dependency review on PRs (SHOULD) | Repository-level GitHub feature | EXTERNAL SETUP REQUIRED |
+| CodeQL for TypeScript (SHOULD) | Enabled via GitHub's file-free "default setup" API (`PATCH .../code-scanning/default-setup`, `state: configured`) — no workflow file added, consistent with deferring a hand-written CodeQL workflow. First scan run (id 32560959672) completed successfully | PASS |
+| Dependency review on PRs (SHOULD) | Public repositories get the dependency-graph-based PR diff automatically; there is no separate bare API toggle to verify, and adding the `dependency-review-action` workflow to *enforce* it was deliberately not done this session (same reasoning as CodeQL: no new workflow file during this rollout) | EXTERNAL SETUP REQUIRED (enforcement workflow deferred as next capability) |
 | npm package created, Trusted Publisher bound | No npm package exists for this template (by design — see restrictions) | EXTERNAL SETUP REQUIRED |
 | "Legacy / Exceptional release pattern" not used by default | No App, no bypass actor, no `RELEASE_APP_ID`/`RELEASE_APP_PRIVATE_KEY` anywhere in this repository | PASS |
+
+## GitHub configuration (verified live via API)
+
+`Continuous-DrivenArchitecture/template-npm-library`, checked via `gh api` after applying it:
+
+- Visibility: public. `is_template: true`.
+- Default branch: `main`. Only `main` exists (no `develop`, no other branch).
+- `delete_branch_on_merge: true`, `allow_squash_merge: true`,
+  `allow_merge_commit: false`, `allow_rebase_merge: false`,
+  `allow_auto_merge: false`.
+- Actions: `enabled: true`, `allowed_actions: selected`
+  (`github_owned_allowed: true`, `verified_allowed: false`,
+  `patterns_allowed: []`), `sha_pinning_required: true`,
+  `default_workflow_permissions: read`, `can_approve_pull_request_reviews: false`.
+- `security_and_analysis`: `secret_scanning: enabled`,
+  `secret_scanning_push_protection: enabled`,
+  `dependabot_security_updates: enabled`. `vulnerability-alerts: enabled`
+  (Dependabot alerts).
+- CodeQL default setup: `state: configured` (languages: javascript-typescript,
+  actions), enabled without adding a workflow file.
+- Ruleset `Protect main` (id `21189927`), `target: branch`,
+  `enforcement: active`, `bypass_actors: []`, `current_user_can_bypass: never`:
+  - `pull_request`: required, `required_approving_review_count: 0`
+    (single-maintainer exception, per baseline), `dismiss_stale_reviews_on_push: true`,
+    `require_code_owner_review: false`, `required_review_thread_resolution: true`,
+    `allowed_merge_methods: ["squash"]`.
+  - `required_status_checks`: `strict_required_status_checks_policy: true`,
+    `required_status_checks: [{"context":"ci-required"}]`.
+  - `non_fast_forward` (force-push blocked), `deletion` (branch deletion blocked).
+  - Legacy branch protection (`GET .../branches/main/protection`) confirmed
+    unused (404 "Branch not protected") — Rulesets are the sole enforcement
+    mechanism, per the baseline.
+
+Not applied (see "Limitations" and `runbooks/setup-repository.md`, Section B):
+npm package creation, npm Trusted Publisher binding, the `dependency-review-action`
+enforcement workflow, CODEOWNERS (not required at 0-approval single-maintainer
+state).
 
 ## Validation log (this template repository, local)
 
@@ -137,13 +181,35 @@ session's tool history for full output.
   no hidden dependency on `archi-semantic-core`, `adapter-xma`, the
   workspace root, or any path outside the template's own tracked files.
   The temporary directory was deleted afterward.
+- **Live GitHub CI, post-rollout:** the initial push's `CI` run failed
+  (`package-verification` job ran `verify-pack`/`verify-consumption` without
+  building first — a real gap this local-only validation log hadn't caught,
+  since every local run up to that point had `npm run build` executed
+  manually beforehand). Fixed in commit `6060918` ("fix(ci): build before
+  verify-pack/verify-consumption..."); the next `CI` run on `main`
+  (32561004185) passed all jobs including `ci-required`.
+- **Live GitHub Release, post-rollout:** both automatic `Release` runs
+  (triggered by `push: branches: [main]`, not manually dispatched) failed at
+  `git ls-remote --heads -- https://github.com/.../REPLACE_ME.git` ("Repository
+  not found", exit 128) — semantic-release's own remote-resolution step,
+  reached before any plugin's `verifyConditions`/`prepare`/`publish` step.
+  `git ls-remote --tags origin` and `gh release list` against the live
+  repository both return empty, confirming no tag and no GitHub Release
+  exist.
 
 ## Limitations of this compliance check
 
-- No real GitHub repository, ruleset, Dependabot/security toggle, or npm
-  Trusted Publisher binding was created or exercised. Every row marked
-  `EXTERNAL SETUP REQUIRED` is unverified against live infrastructure by
-  design — see the task's restrictions and `runbooks/setup-repository.md`.
-  Do not read `PASS` on a file-level row as proof the equivalent GitHub/npm
-  configuration has been applied anywhere.
-- No actual release, tag, or npm publish was performed.
+- The GitHub repository, ruleset, Actions/security settings, and CodeQL
+  default setup described above are real and were verified live via the
+  GitHub API — see "GitHub configuration (verified live via API)".
+- No npm package was created and no npm Trusted Publisher was configured —
+  those remain `EXTERNAL SETUP REQUIRED`, by design (out of scope for this
+  rollout; this template must never be able to publish itself).
+- No actual release, git tag, or GitHub Release was created. Two real
+  `Release` workflow runs did fire automatically (an inherent consequence of
+  `release.yml` triggering on every push to `main`, not a manual dispatch),
+  and both failed cleanly and as expected at semantic-release's own remote
+  check, before any publish/tag/write step — see the validation log.
+- `npm publish`, `npm login`, npm token creation, Trusted Publisher setup,
+  a real `semantic-release` run, and manual release triggering were not
+  performed, per the task's restrictions.
