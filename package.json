@@ -1,0 +1,61 @@
+{
+  "name": "@cda/template-npm-library",
+  "version": "0.0.0-development",
+  "private": true,
+  "description": "PLACEHOLDER — CDA npm Library Profile v1 reference template. Rename before deriving a real repository.",
+  "keywords": [
+    "cda",
+    "template"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "^20.0.0 || ^22.0.0 || >=24.0.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify-pack": "node scripts/verify-pack.mjs",
+    "verify-consumption": "node scripts/verify-package-consumption.mjs",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm run build && npm test"
+  },
+  "devDependencies": {
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.9.0",
+    "semantic-release": "^25.0.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Continuous-DrivenArchitecture/REPLACE_ME.git"
+  },
+  "homepage": "https://github.com/Continuous-DrivenArchitecture/REPLACE_ME#readme",
+  "bugs": {
+    "url": "https://github.com/Continuous-DrivenArchitecture/REPLACE_ME/issues"
+  }
+}

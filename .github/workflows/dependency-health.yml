@@ -1,0 +1,34 @@
+name: Dependency health
+
+on:
+  schedule:
+    - cron: '0 3 * * 1' # weekly, Mondays 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  outdated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # CDA Repository Baseline v1, "Dependency automation": a
+      # freshness check must be informational, never a hard,
+      # unconditionally failing gate. `npm outdated` alone exits
+      # non-zero whenever anything is behind, regardless of severity —
+      # that would train maintainers to ignore red CI. This step never
+      # fails the job; it only surfaces the finding in the run summary.
+      - name: Report outdated dependencies (informational only)
+        run: |
+          {
+            echo '### Dependency freshness (informational — does not fail this job)'
+            echo '```'
+            npm outdated || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

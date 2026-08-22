@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# CDA npm Library Profile v1, "Release workflow permissions": the default,
+# ephemeral GITHUB_TOKEN is used — no App, no minted installation token, no
+# additional secret. contents:write covers creating the git tag and the
+# GitHub Release (both operate on refs outside the protected refs/heads/main
+# namespace, so no ruleset bypass is required or configured). id-token:write
+# covers OIDC for npm Trusted Publishing.
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # npm Trusted Publishing (OIDC) requires npm >= 11.5.1. Node's
+      # bundled npm may lag that; pin the CLI itself explicitly rather
+      # than assume the runner's Node build is new enough.
+      - name: Ensure npm supports OIDC trusted publishing
+        run: npm install -g npm@latest
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+      - name: Validate publishable payload
+        run: npm run verify-pack
+      # No @semantic-release/git, no chore(release) commit, no push to
+      # refs/heads/main. semantic-release computes the next version, writes
+      # it into this job's local, disposable checkout only for the
+      # duration of `npm publish`, creates the git tag (refs/tags/vX.Y.Z)
+      # and the GitHub Release, and publishes to npm via OIDC. See CDA npm
+      # Library Profile v1, "Release" and "Version source of truth".
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

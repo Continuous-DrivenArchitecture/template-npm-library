@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  package-verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Builds, then validates the exact npm-pack payload (verify-pack) and
+      # consumes the packed tarball from an out-of-tree fixture project
+      # (verify-consumption) — see CDA npm Library Profile v1, "Package
+      # verification". Neither is satisfied by `npm test` alone.
+      - run: npm run verify-pack
+      - run: npm run verify-consumption
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Only the production dependency tree ships to consumers. Dev-only
+      # tooling findings (build/release tooling's own dependencies) are
+      # not fixable from this repository and never reach a published
+      # package — see CDA npm Library Profile v1, "Dependency/security
+      # controls".
+      - run: npm audit --omit=dev --audit-level=high
+
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm sbom --sbom-format=spdx --omit=dev > sbom.spdx.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: sbom.spdx.json
+          if-no-files-found: error
+
+  # Stable, matrix-independent required status check (CDA npm Library
+  # Profile v1, "CI"): the main ruleset targets ONLY this job's name.
+  # Adding/removing a Node version in the `test` matrix, or adding a new
+  # CI job above, never requires touching the ruleset's required-checks
+  # list — only this job's `needs:` array changes.
+  ci-required:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [typecheck, lint, test, package-verification, audit, sbom]
+    steps:
+      - name: Verify every required job succeeded
+        run: |
+          for result in \
+            "${{ needs.typecheck.result }}" \
+            "${{ needs.lint.result }}" \
+            "${{ needs.test.result }}" \
+            "${{ needs.package-verification.result }}" \
+            "${{ needs.audit.result }}" \
+            "${{ needs.sbom.result }}"; do
+            if [ "$result" != "success" ]; then
+              echo "::error::at least one required job did not succeed"
+              exit 1
+            fi
+          done
+          echo "All required CI jobs passed."
