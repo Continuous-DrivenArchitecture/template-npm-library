@@ -23,17 +23,47 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # `private: true` in package.json only stops @semantic-release/npm's
+      # own publish step (it checks pkg.private itself) — it does NOT stop
+      # semantic-release's core from computing a version and creating a git
+      # tag, or @semantic-release/github from creating a GitHub Release.
+      # Without this guard, a placeholder repository derived from this
+      # template (still private:true, still the placeholder package name)
+      # would get a real tag and a real GitHub Release the first time this
+      # workflow runs, even though npm publish itself was correctly
+      # skipped. private:true is the authoritative signal a derived
+      # repository has not yet been customized for real publishing (see
+      # README.md, "What a new repository must replace") — checking it
+      # here, once, before anything else runs, is simpler and more honest
+      # than trying to keep two conditions (private + placeholder name) in
+      # sync.
+      - name: Guard against releasing a placeholder package
+        id: guard
+        run: |
+          if [ "$(node -p "require('./package.json').private === true")" = "true" ]; then
+            echo "::notice::package.json is still private:true (placeholder state) — skipping release. Remove private:true once this repository has been customized for real publishing (see README.md)."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.guard.outputs.should_release == 'true'
+        run: npm ci
       # npm Trusted Publishing (OIDC) requires npm >= 11.5.1. Node's
       # bundled npm may lag that; pin the CLI itself explicitly rather
       # than assume the runner's Node build is new enough.
       - name: Ensure npm supports OIDC trusted publishing
+        if: steps.guard.outputs.should_release == 'true'
         run: npm install -g npm@latest
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run build
-      - run: npm test
+      - if: steps.guard.outputs.should_release == 'true'
+        run: npm run typecheck
+      - if: steps.guard.outputs.should_release == 'true'
+        run: npm run lint
+      - if: steps.guard.outputs.should_release == 'true'
+        run: npm run build
+      - if: steps.guard.outputs.should_release == 'true'
+        run: npm test
       - name: Validate publishable payload
+        if: steps.guard.outputs.should_release == 'true'
         run: npm run verify-pack
       # No @semantic-release/git, no chore(release) commit, no push to
       # refs/heads/main. semantic-release computes the next version, writes
@@ -41,6 +71,7 @@ jobs:
       # duration of `npm publish`, creates the git tag (refs/tags/vX.Y.Z)
       # and the GitHub Release, and publishes to npm via OIDC. See CDA npm
       # Library Profile v1, "Release" and "Version source of truth".
-      - run: npx semantic-release
+      - if: steps.guard.outputs.should_release == 'true'
+        run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
