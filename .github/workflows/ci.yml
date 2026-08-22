@@ -55,10 +55,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Builds, then validates the exact npm-pack payload (verify-pack) and
-      # consumes the packed tarball from an out-of-tree fixture project
+      - run: npm run build
+      # Validates the exact npm-pack payload (verify-pack) and consumes the
+      # packed tarball from an out-of-tree fixture project
       # (verify-consumption) — see CDA npm Library Profile v1, "Package
-      # verification". Neither is satisfied by `npm test` alone.
+      # verification". Neither is satisfied by `npm test` alone. Both
+      # require dist/ to already exist, hence the explicit build above —
+      # dist/ is git-ignored and never assumed to be present in a checkout.
       - run: npm run verify-pack
       - run: npm run verify-consumption
 
